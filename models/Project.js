@@ -11,7 +11,7 @@ const projectSchema = new mongoose.Schema({
 
   managerId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
+    ref: "User",  
   },
 });
 

@@ -30,7 +30,25 @@ const createAssignmentHandler = async (req, res) => {
       role,
     } = req.body;
 
-    // Ensure dates are saved in proper Date format
+    const engineer = await User.findById(engineerId);
+    if (!engineer)
+      return res.status(404).json({ message: "Engineer not found" });
+
+    const assignments = await Assignment.find({ engineerId });
+
+    const totalAllocated = assignments.reduce(
+      (sum, a) => sum + a.allocationPercentage,
+      0
+    );
+
+    const remainingCapacity = engineer.maxCapacity - totalAllocated;
+
+    if (allocationPercentage > remainingCapacity) {
+      return res.status(400).json({
+        message: `Cannot assign. Only ${remainingCapacity}% capacity left.`,
+      });
+    }
+
     const assignment = new Assignment({
       engineerId,
       projectId,
@@ -80,6 +98,61 @@ const deleteAssignmentHandler = async (req, res) => {
   }
 };
 
+// const getEngineerCapacities = async (req, res) => {
+//   try {
+//     const engineers = await User.find({ role: "engineer" });
+//     const assignments = await Assignment.find();
+
+//     const capacities = engineers.map((engineer) => {
+//       const assigned = assignments.filter(
+//         (a) => a.engineerId.toString() === engineer._id.toString()
+//       );
+
+//       // Group by overlapping timelines and sum their allocations
+//       let maxOverlapAllocation = 0;
+
+//       for (let i = 0; i < assigned.length; i++) {
+//         const current = assigned[i];
+//         let overlapSum = current.allocationPercentage;
+
+//         for (let j = 0; j < assigned.length; j++) {
+//           if (i !== j) {
+//             const other = assigned[j];
+//             const isOverlapping =
+//               new Date(current.startDate) <= new Date(other.endDate) &&
+//               new Date(other.startDate) <= new Date(current.endDate);
+
+//             if (isOverlapping) {
+//               overlapSum += other.allocationPercentage;
+//             }
+//           }
+//         }
+
+//         if (overlapSum > maxOverlapAllocation) {
+//           maxOverlapAllocation = overlapSum;
+//         }
+//       }
+
+//       return {
+//         engineerId: engineer._id,
+//         name: engineer.name,
+//         department: engineer.department,
+//         currentAllocation: maxOverlapAllocation,
+//         maxCapacity: engineer.maxCapacity,
+//         availableCapacity: Math.max(
+//           engineer.maxCapacity - maxOverlapAllocation,
+//           0
+//         ),
+//       };
+//     });
+
+//     res.status(200).json(capacities);
+//   } catch (error) {
+//     res
+//       .status(500)
+//       .json({ message: "Error fetching capacities", error: error.message });
+//   }
+// };
 const getEngineerCapacities = async (req, res) => {
   try {
     const engineers = await User.find({ role: "engineer" });
@@ -90,51 +163,37 @@ const getEngineerCapacities = async (req, res) => {
         (a) => a.engineerId.toString() === engineer._id.toString()
       );
 
-      // Group by overlapping timelines and sum their allocations
-      let maxOverlapAllocation = 0;
-
-      for (let i = 0; i < assigned.length; i++) {
-        const current = assigned[i];
-        let overlapSum = current.allocationPercentage;
-
-        for (let j = 0; j < assigned.length; j++) {
-          if (i !== j) {
-            const other = assigned[j];
-            const isOverlapping =
-              new Date(current.startDate) <= new Date(other.endDate) &&
-              new Date(other.startDate) <= new Date(current.endDate);
-
-            if (isOverlapping) {
-              overlapSum += other.allocationPercentage;
-            }
-          }
-        }
-
-        if (overlapSum > maxOverlapAllocation) {
-          maxOverlapAllocation = overlapSum;
-        }
-      }
+      const totalAllocation = assigned.reduce(
+        (sum, a) => sum + a.allocationPercentage,
+        0
+      );
 
       return {
         engineerId: engineer._id,
         name: engineer.name,
         department: engineer.department,
-        currentAllocation: maxOverlapAllocation,
+        currentAllocation: totalAllocation,
         maxCapacity: engineer.maxCapacity,
-        availableCapacity: Math.max(
-          engineer.maxCapacity - maxOverlapAllocation,
-          0
-        ),
+        availableCapacity: Math.max(engineer.maxCapacity - totalAllocation, 0),
       };
     });
 
     res.status(200).json(capacities);
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error fetching capacities", error: error.message });
+    res.status(500).json({
+      message: "Error fetching capacities",
+      error: error.message,
+    });
   }
 };
+
+export const getAllAssignment=async()=>{
+  try {
+    const 
+  } catch (error) {
+    
+  }
+}
 
 module.exports = {
   getAssignmentsHandler,
