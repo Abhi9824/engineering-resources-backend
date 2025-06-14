@@ -36,7 +36,7 @@ const PORT = process.env.PORT || 5000;
 app.use(express.json());
 
 const corsOptions = {
-  origin: "https://manage-x-app.vercel.app/",
+  origin: "https://manage-x-app.vercel.app",
   // credentials: true,
 };
 app.use(cors(corsOptions));
