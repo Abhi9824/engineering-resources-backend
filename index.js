@@ -32,12 +32,12 @@ const {
 const User = require("./models/User");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 app.use(express.json());
 
 const corsOptions = {
   origin: "http://localhost:5173",
-  credentials: true,
+  // credentials: true,
 };
 app.use(cors(corsOptions));
 
