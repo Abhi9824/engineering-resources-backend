@@ -11,15 +11,16 @@ const userSchema = new mongoose.Schema({
     required: true,
     set: (v) => v.toLowerCase(),
   },
-
-  // Only applicable if role is 'engineer' (handle conditionally in logic)
   skills: [String],
   seniority: {
     type: String,
     enum: ["junior", "mid", "senior"],
     set: (v) => v.toLowerCase(),
   },
-  maxCapacity: Number,
+  maxCapacity: {
+    type: Number,
+    default: 100,
+  },
   department: String,
 
   projects: [

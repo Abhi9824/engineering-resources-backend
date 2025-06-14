@@ -1,10 +1,33 @@
 const Assignment = require("../models/Assignment");
 const User = require("../models/User");
+const Project = require("../models/Project");
 
+// const getAssignmentsHandler = async (req, res) => {
+//   try {
+//     const query =
+//       req.user.role === "engineer" ? { engineerId: req.user.userId } : {};
+
+//     const assignments = await Assignment.find(query)
+//       .populate("engineerId", "name email maxCapacity department")
+//       .populate("projectId", "name startDate endDate status");
+
+//     res.status(200).json(assignments);
+//   } catch (error) {
+//     res.status(500).json({
+//       message: "Fetching assignments failed",
+//       error: error.message,
+//     });
+//   }
+// };
 const getAssignmentsHandler = async (req, res) => {
   try {
-    const query =
-      req.user.role === "engineer" ? { engineerId: req.user.userId } : {};
+    let query = {};
+
+    if (req.user.role === "engineer") {
+      query = { engineerId: req.user.userId };
+    } else if (req.user.role === "manager") {
+      query = { createdBy: req.user.userId };
+    }
 
     const assignments = await Assignment.find(query)
       .populate("engineerId", "name email maxCapacity department")
@@ -22,6 +45,7 @@ const getAssignmentsHandler = async (req, res) => {
 const createAssignmentHandler = async (req, res) => {
   try {
     const {
+      name,
       engineerId,
       projectId,
       allocationPercentage,
@@ -30,35 +54,73 @@ const createAssignmentHandler = async (req, res) => {
       role,
     } = req.body;
 
+    const createdBy = req.user.userId;
     const engineer = await User.findById(engineerId);
-    if (!engineer)
+    if (!engineer) {
       return res.status(404).json({ message: "Engineer not found" });
+    }
 
-    const assignments = await Assignment.find({ engineerId });
+    // Validating project existence and get its dates
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return res.status(404).json({ message: "Project not found" });
+    }
 
-    const totalAllocated = assignments.reduce(
+    const projectStart = new Date(project.startDate);
+    const projectEnd = new Date(project.endDate);
+    const assignmentStart = new Date(startDate);
+    const assignmentEnd = new Date(endDate);
+
+    // Validating assignment dates are within project duration
+    if (
+      assignmentStart < projectStart ||
+      assignmentEnd > projectEnd ||
+      assignmentStart > assignmentEnd
+    ) {
+      return res.status(400).json({
+        message: `Assignment dates must be within project duration (${projectStart.toDateString()} - ${projectEnd.toDateString()})`,
+      });
+    }
+
+    // Check for overlapping assignments and validate allocation
+    const overlappingAssignments = await Assignment.find({
+      engineerId,
+      $or: [
+        {
+          startDate: { $lte: assignmentEnd },
+          endDate: { $gte: assignmentStart },
+        },
+      ],
+    });
+
+    const overlappingAllocation = overlappingAssignments.reduce(
       (sum, a) => sum + a.allocationPercentage,
       0
     );
 
-    const remainingCapacity = engineer.maxCapacity - totalAllocated;
-
-    if (allocationPercentage > remainingCapacity) {
+    const maxCapacity = engineer.maxCapacity || 100;
+    if (overlappingAllocation + allocationPercentage > maxCapacity) {
       return res.status(400).json({
-        message: `Cannot assign. Only ${remainingCapacity}% capacity left.`,
+        message: `Cannot assign. Exceeds capacity. Current overlapping allocation: ${overlappingAllocation}%, trying to add ${allocationPercentage}% (Max: ${maxCapacity}%)`,
       });
     }
 
+    // Creating and saving the assignment
     const assignment = new Assignment({
+      name,
+      createdBy,
       engineerId,
       projectId,
       allocationPercentage,
-      startDate: new Date(startDate),
-      endDate: new Date(endDate),
+      startDate: assignmentStart,
+      endDate: assignmentEnd,
       role,
     });
 
     await assignment.save();
+    engineer.assignments.push(assignment._id);
+    await engineer.save();
+
     res.status(201).json(assignment);
   } catch (error) {
     res.status(500).json({
@@ -98,61 +160,6 @@ const deleteAssignmentHandler = async (req, res) => {
   }
 };
 
-// const getEngineerCapacities = async (req, res) => {
-//   try {
-//     const engineers = await User.find({ role: "engineer" });
-//     const assignments = await Assignment.find();
-
-//     const capacities = engineers.map((engineer) => {
-//       const assigned = assignments.filter(
-//         (a) => a.engineerId.toString() === engineer._id.toString()
-//       );
-
-//       // Group by overlapping timelines and sum their allocations
-//       let maxOverlapAllocation = 0;
-
-//       for (let i = 0; i < assigned.length; i++) {
-//         const current = assigned[i];
-//         let overlapSum = current.allocationPercentage;
-
-//         for (let j = 0; j < assigned.length; j++) {
-//           if (i !== j) {
-//             const other = assigned[j];
-//             const isOverlapping =
-//               new Date(current.startDate) <= new Date(other.endDate) &&
-//               new Date(other.startDate) <= new Date(current.endDate);
-
-//             if (isOverlapping) {
-//               overlapSum += other.allocationPercentage;
-//             }
-//           }
-//         }
-
-//         if (overlapSum > maxOverlapAllocation) {
-//           maxOverlapAllocation = overlapSum;
-//         }
-//       }
-
-//       return {
-//         engineerId: engineer._id,
-//         name: engineer.name,
-//         department: engineer.department,
-//         currentAllocation: maxOverlapAllocation,
-//         maxCapacity: engineer.maxCapacity,
-//         availableCapacity: Math.max(
-//           engineer.maxCapacity - maxOverlapAllocation,
-//           0
-//         ),
-//       };
-//     });
-
-//     res.status(200).json(capacities);
-//   } catch (error) {
-//     res
-//       .status(500)
-//       .json({ message: "Error fetching capacities", error: error.message });
-//   }
-// };
 const getEngineerCapacities = async (req, res) => {
   try {
     const engineers = await User.find({ role: "engineer" });
@@ -186,14 +193,6 @@ const getEngineerCapacities = async (req, res) => {
     });
   }
 };
-
-export const getAllAssignment=async()=>{
-  try {
-    const 
-  } catch (error) {
-    
-  }
-}
 
 module.exports = {
   getAssignmentsHandler,

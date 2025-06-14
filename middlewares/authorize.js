@@ -10,17 +10,14 @@ const authorizeRoles = (...allowedRoles) => {
         .json({ message: "Unauthorized: No token provided" });
     }
 
-    // Accept both "Bearer <token>" and just "<token>"
     const token = authHeader.startsWith("Bearer ")
       ? authHeader.split(" ")[1]
       : authHeader;
 
     try {
       const decoded = jwt.verify(token, JWT_SECRET);
-
-      // Attach user info to request (standardize as userId and role)
       req.user = {
-        userId: decoded.id || decoded._id, // Support both 'id' and '_id' keys
+        userId: decoded.userId,
         role: decoded.role?.toLowerCase(),
       };
 

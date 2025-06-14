@@ -5,8 +5,15 @@ require("dotenv").config();
 
 const { initializeDatabase } = require("./db/db");
 const authorizeRoles = require("./middlewares/authorize");
+const Assignment = require("./models/Assignment");
 
-const { signupHandler, loginHandler, profileHandler } = require("./utils/auth");
+const {
+  signupHandler,
+  loginHandler,
+  profileHandler,
+  updateUserHandler,
+  deleteUserHandler,
+} = require("./utils/auth");
 
 const {
   getProjectsHandler,
@@ -26,9 +33,13 @@ const User = require("./models/User");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-app.use(cors());
 app.use(express.json());
+
+const corsOptions = {
+  origin: "http://localhost:5173",
+  credentials: true,
+};
+app.use(cors(corsOptions));
 
 initializeDatabase();
 
@@ -43,15 +54,56 @@ app.get(
   profileHandler
 );
 
+// For updating a user
+app.put("/api/users", authorizeRoles("manager", "engineer"), updateUserHandler);
+
+// For deleting a user
+app.delete(
+  "/api/users/:id",
+  authorizeRoles("manager", "engineer"),
+  deleteUserHandler
+);
+
 // --- ENGINEERS ---
 app.get("/api/engineers", authorizeRoles("manager"), async (req, res) => {
   try {
     const engineers = await User.find({ role: "engineer" });
-    res.status(200).json(engineers);
+
+    const engineerData = await Promise.all(
+      engineers.map(async (engineer) => {
+        const assignments = await Assignment.find({ engineerId: engineer._id });
+
+        const totalAllocation = assignments.reduce(
+          (sum, a) => sum + (a.allocationPercentage || 0),
+          0
+        );
+
+        const availableCapacity = Math.max(
+          engineer.maxCapacity - totalAllocation,
+          0
+        );
+
+        return {
+          _id: engineer._id,
+          name: engineer.name,
+          email: engineer.email,
+          role: engineer.role,
+          department: engineer.department,
+          maxCapacity: engineer.maxCapacity,
+          availableCapacity,
+          skills: engineer.skills,
+          seniority: engineer.seniority,
+          assignments,
+        };
+      })
+    );
+
+    res.status(200).json(engineerData);
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Fetching engineers failed", error: error.message });
+    res.status(500).json({
+      message: "Fetching engineers with capacity failed",
+      error: error.message,
+    });
   }
 });
 
@@ -82,7 +134,7 @@ app.get(
 app.get(
   "/api/projects",
   authorizeRoles("manager", "engineer"),
-  getProjectsHandler
+  getProjectByIdHandler
 );
 // assigning Project to engineer
 app.post("/api/projects", authorizeRoles("manager"), createProject);
@@ -91,7 +143,7 @@ app.get(
   authorizeRoles("manager", "engineer"),
   getProjectByIdHandler
 );
-app.get("/api/projects", getProjectsHandler);
+// app.get("/api/projects", getProjectsHandler);
 
 // --- ASSIGNMENTS ---
 app.get(
